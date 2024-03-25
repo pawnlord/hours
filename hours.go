@@ -133,12 +133,11 @@ func main() {
 	}
 
 	ticker := time.NewTicker(20 * time.Second)
-	var t time.Time
 	quit := make(chan struct{})
 	go func() {
 		for {
 			select {
-			case t = <-ticker.C:
+			case <-ticker.C:
 				updateAndSave(stats)
 			case <-quit:
 				ticker.Stop()
@@ -162,7 +161,14 @@ func main() {
 			j, _ := json.MarshalIndent(stats, "", "    ")
 			fmt.Println(string(j[:]))
 		case 2:
-			fmt.Println(t.Clock())
+			rootinfo, ok := stats["."]
+			if ok {
+				fmt.Println("You have spent", (rootinfo.TotalWorked/60)/60, "hours,",
+					(rootinfo.TotalWorked/60)%60, "minutes,",
+					rootinfo.TotalWorked%60, "seconds rootinfo working on this repo")
+			} else {
+				fmt.Println("Script has not scraped time yet for this repository")
+			}
 		}
 	}
 
