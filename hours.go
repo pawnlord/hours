@@ -20,26 +20,6 @@ type FileStatsDelta struct {
 	End       int64
 }
 
-func printStat(filepath string) {
-	files, err := os.ReadDir(filepath)
-	if err != nil {
-		fmt.Println(err)
-	}
-	for _, file := range files {
-		if !file.IsDir() {
-			fmt.Println(file.Name())
-			stat, err := file.Info()
-			if err != nil {
-				fmt.Println(err)
-			}
-
-			fmt.Println(filepath+"/"+stat.Name(), stat.Size(), stat.ModTime().Unix())
-		} else {
-			printStat(filepath + "/" + file.Name())
-		}
-	}
-}
-
 func updateStat(filepath string, stats map[string]FileStats) FileStatsDelta {
 	files, err := os.ReadDir(filepath)
 	if err != nil {
@@ -125,11 +105,9 @@ func updateStat(filepath string, stats map[string]FileStats) FileStatsDelta {
 }
 
 func updateAndSave(stats map[string]FileStats) {
-	// printStat(".")
 	updateStat(".", stats)
 
 	j, _ := json.Marshal(stats)
-	// fmt.Println(string(j[:]))
 	os.WriteFile("hours.json", j, 0644)
 }
 
