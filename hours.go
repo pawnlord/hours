@@ -151,14 +151,13 @@ func main() {
 	jsonRead(".hoursignore.json", &hoursignore)
 
 	for name, stat := range stats {
-		fmt.Println(name, stat)
 		stats[name] = FileStats{
 			stat.LastModified,
 			stat.TotalWorked,
 		}
 	}
 
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(20 * time.Second)
 	quit := make(chan struct{})
 	go func() {
 		for {
