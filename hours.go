@@ -70,11 +70,13 @@ func updateStat(filepath string, stats map[string]FileStats) []FileStatsDelta {
 				delta = currentTime - workInfo.LastModified
 				// If the distance between edits is more than 10 minutes, we trim it to a smaller amount
 				// to be maximally accurate to how long we worked before the 10 minutes was over
-				if delta > 60*10 {
-					delta = 60 * 5
-				}
 
 				start = workInfo.TotalWorked
+				if delta > 60*10 {
+					delta = 60 * 5
+					start = currentTime - 60*5
+				}
+
 				totalWorked = workInfo.TotalWorked + delta
 			}
 
@@ -109,6 +111,30 @@ func updateStat(filepath string, stats map[string]FileStats) []FileStatsDelta {
 			stats[path] = FileStats{newest, subtotal + latestEnd - earliestStart}
 		}
 	}
+
+	var newest int64 = 0
+	var earliestStart int64 = 0
+	var latestEnd int64 = 0
+
+	for _, d := range deltas {
+		if d.NewestMod > newest {
+			newest = d.NewestMod
+		}
+		if d.Start < earliestStart {
+			earliestStart = d.Start
+		}
+		if d.End > latestEnd {
+			latestEnd = d.End
+		}
+	}
+
+	var subtotal int64 = 0
+	if workInfo, ok := stats[filepath]; ok {
+		subtotal = workInfo.TotalWorked
+	}
+
+	stats[filepath] = FileStats{newest, subtotal + latestEnd - earliestStart}
+
 	return deltas
 }
 
