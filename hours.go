@@ -104,7 +104,6 @@ func updateStat(filepath string, stats map[string]FileStats) FileStatsDelta {
 	}
 
 	for _, d := range deltas {
-		fmt.Println(d.NewestMod, d.Start, d.End, workInfo.LastModified)
 		if d.NewestMod > newest {
 			newest = d.NewestMod
 		}
@@ -120,7 +119,6 @@ func updateStat(filepath string, stats map[string]FileStats) FileStatsDelta {
 		latestEnd = earliestStart
 	}
 
-	fmt.Println(filepath, subtotal, latestEnd, earliestStart)
 	stats[filepath] = FileStats{newest, subtotal + latestEnd - earliestStart}
 
 	return FileStatsDelta{newest, earliestStart, latestEnd}
@@ -156,7 +154,7 @@ func main() {
 		}
 	}
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(20 * time.Second)
 	var t time.Time
 	quit := make(chan struct{})
 	go func() {
@@ -183,7 +181,7 @@ func main() {
 		case 0:
 			return
 		case 1:
-			j, _ := json.Marshal(stats)
+			j, _ := json.MarshalIndent(stats, "", "    ")
 			fmt.Println(string(j[:]))
 		case 2:
 			fmt.Println(t.Clock())
