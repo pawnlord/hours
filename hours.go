@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -39,7 +40,7 @@ func printStat(filepath string) {
 	}
 }
 
-func updateStat(filepath string, stats map[string]FileStats) []FileStatsDelta {
+func updateStat(filepath string, stats map[string]FileStats) FileStatsDelta {
 	files, err := os.ReadDir(filepath)
 	if err != nil {
 		fmt.Println(err)
@@ -85,57 +86,44 @@ func updateStat(filepath string, stats map[string]FileStats) []FileStatsDelta {
 			stats[path] = FileStats{stat.ModTime().Unix(), totalWorked}
 
 		} else {
-			subdeltas := updateStat(filepath+"/"+file.Name(), stats)
-
-			var newest int64 = 0
-			var earliestStart int64 = 0
-			var latestEnd int64 = 0
-
-			for _, d := range subdeltas {
-				if d.NewestMod > newest {
-					newest = d.NewestMod
-				}
-				if d.Start < earliestStart {
-					earliestStart = d.Start
-				}
-				if d.End > latestEnd {
-					latestEnd = d.End
-				}
-			}
-
-			var subtotal int64 = 0
-			if workInfo, ok := stats[path]; ok {
-				subtotal = workInfo.TotalWorked
-			}
-
-			stats[path] = FileStats{newest, subtotal + latestEnd - earliestStart}
+			deltas = append(deltas, updateStat(filepath+"/"+file.Name(), stats))
 		}
 	}
 
 	var newest int64 = 0
-	var earliestStart int64 = 0
+	var earliestStart int64 = math.MaxInt64
 	var latestEnd int64 = 0
 
+	var subtotal int64 = 0
+	workInfo, ok := stats[filepath]
+
+	if ok {
+		subtotal = workInfo.TotalWorked
+	} else {
+		workInfo = FileStats{0, 0}
+	}
+
 	for _, d := range deltas {
+		fmt.Println(d.NewestMod, d.Start, d.End, workInfo.LastModified)
 		if d.NewestMod > newest {
 			newest = d.NewestMod
 		}
-		if d.Start < earliestStart {
+		if d.Start < earliestStart && d.NewestMod >= workInfo.LastModified {
 			earliestStart = d.Start
 		}
-		if d.End > latestEnd {
+		if d.End > latestEnd && d.NewestMod > workInfo.LastModified {
 			latestEnd = d.End
 		}
 	}
 
-	var subtotal int64 = 0
-	if workInfo, ok := stats[filepath]; ok {
-		subtotal = workInfo.TotalWorked
+	if latestEnd < earliestStart {
+		latestEnd = earliestStart
 	}
 
+	fmt.Println(filepath, subtotal, latestEnd, earliestStart)
 	stats[filepath] = FileStats{newest, subtotal + latestEnd - earliestStart}
 
-	return deltas
+	return FileStatsDelta{newest, earliestStart, latestEnd}
 }
 
 func updateAndSave(stats map[string]FileStats) {
