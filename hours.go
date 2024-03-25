@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 type FileStats struct {
@@ -48,7 +49,7 @@ func updateStat(filepath string, stats map[string]FileStats) []FileStatsDelta {
 
 	for _, file := range files {
 		path := filepath + "/" + file.Name()
-		if strings.Contains(path, "git") {
+		if strings.Contains(path, "git") || path == filepath+"/hours.json" {
 			continue
 		}
 		if !file.IsDir() {
@@ -62,11 +63,19 @@ func updateStat(filepath string, stats map[string]FileStats) []FileStatsDelta {
 
 			var totalWorked int64 = 0
 			var start int64 = 0
+			var delta int64 = 0
 
 			workInfo, ok := stats[path]
 			if ok {
+				delta = currentTime - workInfo.LastModified
+				// If the distance between edits is more than 10 minutes, we trim it to a smaller amount
+				// to be maximally accurate to how long we worked before the 10 minutes was over
+				if delta > 60*10 {
+					delta = 60 * 5
+				}
+
 				start = workInfo.TotalWorked
-				totalWorked = workInfo.TotalWorked + (currentTime - workInfo.LastModified)
+				totalWorked = workInfo.TotalWorked + delta
 			}
 
 			deltas = append(deltas, FileStatsDelta{currentTime, start, totalWorked})
@@ -103,6 +112,15 @@ func updateStat(filepath string, stats map[string]FileStats) []FileStatsDelta {
 	return deltas
 }
 
+func updateAndSave(stats map[string]FileStats) {
+	// printStat(".")
+	updateStat(".", stats)
+
+	j, _ := json.Marshal(stats)
+	// fmt.Println(string(j[:]))
+	os.WriteFile("hours.json", j, 0644)
+}
+
 func main() {
 	stats := make(map[string]FileStats)
 
@@ -112,12 +130,50 @@ func main() {
 		if err != nil {
 			return
 		}
+	} else {
+		fmt.Println(err)
 	}
 
-	// printStat(".")
-	updateStat(".", stats)
+	for name, stat := range stats {
+		fmt.Println(name, stat)
+		stats[name] = FileStats{
+			stat.LastModified,
+			stat.TotalWorked,
+		}
+	}
 
-	j, _ := json.Marshal(stats)
-	fmt.Println(string(j[:]))
-	os.WriteFile("hours.json", j, 0)
+	ticker := time.NewTicker(5 * time.Second)
+	var t time.Time
+	quit := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case t = <-ticker.C:
+				updateAndSave(stats)
+			case <-quit:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+	defer close(quit)
+
+	for {
+		fmt.Println("Choose an option")
+		fmt.Println("    0) Exit")
+		fmt.Println("    1) Print json")
+		fmt.Println("    2) Print time")
+		var choice int
+		fmt.Scanln(&choice)
+		switch choice {
+		case 0:
+			return
+		case 1:
+			j, _ := json.Marshal(stats)
+			fmt.Println(string(j[:]))
+		case 2:
+			fmt.Println(t.Clock())
+		}
+	}
+
 }
