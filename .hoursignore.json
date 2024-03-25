@@ -1,0 +1,14 @@
+[
+    {
+        "Pattern": "./go.mod",
+        "IsNeg": false
+    },
+    {
+        "Pattern": "./ignored_folder",
+        "IsNeg": false
+    },
+    {
+        "Pattern": "./hours.go",
+        "IsNeg": true
+    }
+]

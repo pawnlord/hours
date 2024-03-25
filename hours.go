@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path"
 	"strings"
 	"time"
 )
@@ -20,7 +21,12 @@ type FileStatsDelta struct {
 	End       int64
 }
 
-func updateStat(filepath string, stats map[string]FileStats) FileStatsDelta {
+type IgnoreInfo struct {
+	Pattern string
+	IsNeg   bool
+}
+
+func updateStat(filepath string, stats map[string]FileStats, hoursignore []IgnoreInfo) FileStatsDelta {
 	files, err := os.ReadDir(filepath)
 	if err != nil {
 		fmt.Println(err)
@@ -29,10 +35,24 @@ func updateStat(filepath string, stats map[string]FileStats) FileStatsDelta {
 	deltas := make([]FileStatsDelta, 0)
 
 	for _, file := range files {
-		path := filepath + "/" + file.Name()
-		if strings.Contains(path, "git") || path == filepath+"/hours.json" {
+		pathString := filepath + "/" + file.Name()
+		if strings.Contains(pathString, ".git/") || pathString == filepath+"/hours.json" {
 			continue
 		}
+		match := false
+		for _, ignore := range hoursignore {
+			matched, _ := path.Match(ignore.Pattern, pathString)
+			match = match || matched
+			if ignore.IsNeg && matched {
+				match = false
+				break
+			}
+		}
+
+		if match {
+			continue
+		}
+
 		if !file.IsDir() {
 
 			stat, err := file.Info()
@@ -46,16 +66,16 @@ func updateStat(filepath string, stats map[string]FileStats) FileStatsDelta {
 			var start int64 = 0
 			var delta int64 = 0
 
-			workInfo, ok := stats[path]
+			workInfo, ok := stats[pathString]
 			if ok {
 				delta = currentTime - workInfo.LastModified
 				// If the distance between edits is more than 10 minutes, we trim it to a smaller amount
-				// to be maximally accurate to how long we worked before the 10 minutes was over
+				// to be somewhat accurate to how long we worked before the 10 minutes was over
 
 				start = workInfo.TotalWorked
 				if delta > 60*10 {
-					delta = 60 * 5
-					start = currentTime - 60*5
+					delta = 60
+					start = currentTime - 60
 				}
 
 				totalWorked = workInfo.TotalWorked + delta
@@ -63,10 +83,10 @@ func updateStat(filepath string, stats map[string]FileStats) FileStatsDelta {
 
 			deltas = append(deltas, FileStatsDelta{currentTime, start, totalWorked})
 
-			stats[path] = FileStats{stat.ModTime().Unix(), totalWorked}
+			stats[pathString] = FileStats{stat.ModTime().Unix(), totalWorked}
 
 		} else {
-			deltas = append(deltas, updateStat(filepath+"/"+file.Name(), stats))
+			deltas = append(deltas, updateStat(filepath+"/"+file.Name(), stats, hoursignore))
 		}
 	}
 
@@ -104,25 +124,31 @@ func updateStat(filepath string, stats map[string]FileStats) FileStatsDelta {
 	return FileStatsDelta{newest, earliestStart, latestEnd}
 }
 
-func updateAndSave(stats map[string]FileStats) {
-	updateStat(".", stats)
+func updateAndSave(stats map[string]FileStats, hoursignore []IgnoreInfo) {
+	updateStat(".", stats, hoursignore)
 
 	j, _ := json.Marshal(stats)
 	os.WriteFile("hours.json", j, 0644)
 }
 
-func main() {
-	stats := make(map[string]FileStats)
-
-	body, err := os.ReadFile("hours.json")
+func jsonRead(filename string, v any) {
+	body, err := os.ReadFile(filename)
 	if err == nil {
-		err = json.Unmarshal(body, &stats)
+		err = json.Unmarshal(body, v)
 		if err != nil {
 			return
 		}
 	} else {
 		fmt.Println(err)
 	}
+}
+
+func main() {
+	stats := make(map[string]FileStats)
+	hoursignore := make([]IgnoreInfo, 0)
+
+	jsonRead("hours.json", &stats)
+	jsonRead(".hoursignore.json", &hoursignore)
 
 	for name, stat := range stats {
 		fmt.Println(name, stat)
@@ -132,13 +158,13 @@ func main() {
 		}
 	}
 
-	ticker := time.NewTicker(20 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	quit := make(chan struct{})
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
-				updateAndSave(stats)
+				updateAndSave(stats, hoursignore)
 			case <-quit:
 				ticker.Stop()
 				return
